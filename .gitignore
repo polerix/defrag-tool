@@ -5,3 +5,8 @@ dist-ssr
 *.local
 
 .vscode
+node_modules/
+dist/
+build/
+.vscode/
+.idea/

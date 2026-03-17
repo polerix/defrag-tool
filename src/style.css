@@ -1,0 +1,402 @@
+/* ═══════════════════════════════════════════════════════════════════
+   DEFRAG.EXE  — MS-DOS Defragmentation Utility  (Haunted Edition)
+   ═══════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* DOS palette */
+  --bg:      #000000;
+  --scrn:    #0000AA;
+  --txt:     #FFFFFF;
+  --bright:  #FFFF55;
+  --cyan:    #55FFFF;
+  --red:     #FF5555;
+  --green:   #55FF55;
+  --magenta: #FF55FF;
+  --gray:    #AAAAAA;
+  --darkblue:#000055;
+
+  /* Cell colours */
+  --c-free:  #000044;
+  --c-used:  #AAAAAA;
+  --c-sys:   #FFFFFF;
+  --c-bad:   #880000;
+  --c-flag:  #FFFF55;
+  --c-bomb:  #FF6600;
+  --c-qmark: #00AAAA;
+  --c-expl:  #330000;
+
+  /* Cell dimensions */
+  --cw: 12px;
+  --ch:  8px;
+  --sw: 13px;   /* cw + 1px gap */
+  --sh:  9px;   /* ch + 1px gap */
+}
+
+html, body {
+  background: var(--bg);
+  min-height: 100vh;
+}
+
+body {
+  color: var(--txt);
+  font-family: 'VT323', 'Courier New', monospace;
+  font-size: 18px;
+  display: flex;
+  justify-content: center;
+  padding: 28px 16px 16px;
+}
+
+/* ── Outer screen panel ──────────────────────────────────────────── */
+#screen {
+  width: 720px;
+  background: var(--scrn);
+  border: 2px solid var(--txt);
+  outline: 2px solid var(--txt);
+  outline-offset: 4px;
+  position: relative;
+  /* subtle CRT scanlines */
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0px, transparent 2px,
+    rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 3px
+  );
+}
+
+/* ── Title bar ───────────────────────────────────────────────────── */
+#titlebar {
+  background: var(--gray);
+  color: #000000;
+  padding: 2px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 19px;
+  letter-spacing: 0.04em;
+  border-bottom: 2px solid #000;
+}
+
+#titlebar .blink-cur {
+  animation: cur-blink 1s step-end infinite;
+  margin-left: 2px;
+}
+
+@keyframes cur-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── Main content ────────────────────────────────────────────────── */
+#content {
+  padding: 10px 12px 6px;
+}
+
+/* ── Grid wrapper (entity layer anchor) ─────────────────────────── */
+#grid-wrap {
+  position: relative;
+  display: inline-block;
+  box-shadow: 0 0 0 1px #444488;
+}
+
+/* ── The cell grid ───────────────────────────────────────────────── */
+#grid {
+  display: grid;
+  grid-template-columns: repeat(50, var(--cw));
+  gap: 1px;
+  padding: 2px;
+  background: #00001A;
+  user-select: none;
+}
+
+/* ── Individual cells ────────────────────────────────────────────── */
+.cell {
+  width:  var(--cw);
+  height: var(--ch);
+  font-size: 7px;
+  line-height: var(--ch);
+  text-align: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.cell.free  { background: var(--c-free); }
+.cell.used  { background: var(--c-used); }
+.cell.sys   { background: var(--c-sys);  }
+.cell.bad   { background: var(--c-bad);  }
+.cell.expl  { background: var(--c-expl); color: var(--red); font-size: 7px; }
+
+/* ── Interactive special cells ───────────────────────────────────── */
+.cell.flag {
+  background: var(--c-flag);
+  color: #000000;
+  cursor: pointer;
+  font-weight: bold;
+  animation: flag-pulse 1.5s ease-in-out infinite;
+}
+
+.cell.bomb {
+  background: var(--c-bomb);
+  color: #000000;
+  cursor: pointer;
+  font-weight: bold;
+  animation: bomb-pulse 0.9s ease-in-out infinite;
+}
+
+.cell.qmark {
+  background: var(--c-qmark);
+  color: #000000;
+  cursor: pointer;
+  font-weight: bold;
+  animation: q-pulse 2.0s ease-in-out infinite;
+}
+
+.cell.flag:hover  { filter: brightness(1.4); transform: scale(1.15); z-index: 5; }
+.cell.bomb:hover  { filter: brightness(1.4); transform: scale(1.15); z-index: 5; }
+.cell.qmark:hover { filter: brightness(1.4); transform: scale(1.15); z-index: 5; }
+
+@keyframes flag-pulse  { 0%,100%{ opacity:1; } 50%{ opacity:0.55; } }
+@keyframes bomb-pulse  { 0%,100%{ opacity:1; } 50%{ opacity:0.45; } }
+@keyframes q-pulse     { 0%,100%{ opacity:1; } 50%{ opacity:0.60; } }
+
+/* ── Entity overlay ──────────────────────────────────────────────── */
+#entities {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 10;
+}
+
+/* ── Emoji entities ──────────────────────────────────────────────── */
+.ent-emoji {
+  position: absolute;
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
+  text-shadow: 0 0 4px rgba(255,255,255,0.5);
+  transition: none;
+}
+
+.ent-emoji.eaten {
+  animation: eat-anim 0.38s ease-in forwards;
+}
+
+@keyframes eat-anim {
+  0%   { transform: scale(1)   rotate(0deg);   opacity: 1; }
+  50%  { transform: scale(1.8) rotate(180deg); opacity: 0.6; }
+  100% { transform: scale(0)   rotate(360deg); opacity: 0; }
+}
+
+/* ── Blast particles ─────────────────────────────────────────────── */
+.blast-particle {
+  position: absolute;
+  font-size: 14px;
+  line-height: 1;
+  pointer-events: none;
+  animation: blast-out 0.7s ease-out forwards;
+}
+
+@keyframes blast-out {
+  0%   { transform: translate(0,0) scale(1.2); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+}
+
+/* ── Pac-Man (CHOMPER) ───────────────────────────────────────────── */
+.ent-pac {
+  position: absolute;
+  width:  14px;
+  height: 14px;
+  background: conic-gradient(
+    #FFFF00 0deg 165deg,
+    transparent 165deg 195deg,
+    #FFFF00 195deg 360deg
+  );
+  border-radius: 50%;
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px #FFFF00);
+  transition: none;
+}
+
+.ent-pac.mouth-open {
+  background: conic-gradient(
+    #FFFF00 0deg 130deg,
+    transparent 130deg 230deg,
+    #FFFF00 230deg 360deg
+  );
+}
+
+.ent-pac[data-dir="0"] { transform: rotate(0deg);   }
+.ent-pac[data-dir="1"] { transform: rotate(90deg);  }
+.ent-pac[data-dir="2"] { transform: rotate(180deg); }
+.ent-pac[data-dir="3"] { transform: rotate(270deg); }
+
+/* eat dot trail */
+.pac-dot {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #FFFF88;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: dot-fade 1.2s ease-out forwards;
+}
+
+@keyframes dot-fade {
+  0%   { opacity: 0.9; transform: scale(1);  }
+  100% { opacity: 0;   transform: scale(0.3); }
+}
+
+/* Score pop */
+.score-pop {
+  position: absolute;
+  color: var(--bright);
+  font-family: 'VT323', monospace;
+  font-size: 14px;
+  pointer-events: none;
+  animation: pop-up 0.7s ease-out forwards;
+  white-space: nowrap;
+}
+
+@keyframes pop-up {
+  0%   { transform: translateY(0);   opacity: 1; }
+  100% { transform: translateY(-24px); opacity: 0; }
+}
+
+/* ── Legend row ──────────────────────────────────────────────────── */
+#legend {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 14px;
+  font-size: 16px;
+  color: var(--txt);
+}
+
+#legend .li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.lbox {
+  display: inline-block;
+  width: var(--cw);
+  height: var(--ch);
+  font-size: 7px;
+  line-height: var(--ch);
+  text-align: center;
+  vertical-align: middle;
+  font-style: normal;
+  font-weight: bold;
+}
+
+.lbox.used  { background: var(--c-used);  }
+.lbox.free  { background: var(--c-free);  }
+.lbox.sys   { background: var(--c-sys);   }
+.lbox.bad   { background: var(--c-bad);   }
+.lbox.flag  { background: var(--c-flag);  color: #000; }
+.lbox.bomb  { background: var(--c-bomb);  color: #000; }
+.lbox.qmark { background: var(--c-qmark); color: #000; }
+
+/* ── Progress ────────────────────────────────────────────────────── */
+#progress-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 17px;
+}
+
+#progress-label { color: var(--cyan); }
+#progress-bar   { color: var(--green); letter-spacing: -0.02em; }
+#progress-pct   { color: var(--bright); min-width: 40px; }
+
+/* cluster info line */
+#cluster-info {
+  margin-top: 3px;
+  font-size: 15px;
+  color: #7777BB;
+}
+
+/* ── Controls hint ───────────────────────────────────────────────── */
+#controls {
+  border-top: 1px solid #333366;
+  border-bottom: 1px solid #333366;
+  padding: 3px 12px;
+  font-size: 15px;
+  color: #8888BB;
+  background: rgba(0,0,0,0.2);
+  letter-spacing: 0.03em;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────── */
+#statusbar {
+  background: #000088;
+  border-top: 1px solid var(--gray);
+  padding: 3px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+}
+
+#status { color: var(--bright); }
+#timer  { color: var(--cyan); }
+
+/* alert blink on status */
+#status.alert {
+  animation: status-blink 0.22s step-end 8;
+}
+
+@keyframes status-blink {
+  0%, 100% { color: var(--bright); }
+  50%       { color: var(--red);   }
+}
+
+/* ── Completion overlay ──────────────────────────────────────────── */
+#done-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,68,0.85);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+#done-overlay.visible {
+  display: flex;
+  animation: overlay-in 0.3s ease-out;
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+#done-box {
+  border: 2px solid var(--txt);
+  background: var(--scrn);
+  padding: 18px 32px;
+  text-align: center;
+  outline: 2px solid var(--txt);
+  outline-offset: 3px;
+}
+
+#done-box h2 {
+  font-size: 26px;
+  color: var(--bright);
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+  font-weight: normal;
+}
+
+#done-box p {
+  font-size: 18px;
+  color: var(--cyan);
+}

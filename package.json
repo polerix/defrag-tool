@@ -1,27 +1,13 @@
 {
-  "name": "defrag",
-  "version": "0.0.0",
+  "name": "defrag-exe",
+  "version": "1.0.0",
+  "description": "MS-DOS Defragmentation Utility (Haunted Edition)",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "vite",
     "build": "vite build",
-    "serve": "vite preview",
-    "prepare": "husky install",
-    "semantic-release": "semantic-release"
-  },
-  "dependencies": {
-    "howler": "^2.2.3",
-    "lodash": "^4.17.21",
-    "luxon": "^2.0.2",
-    "vue": "^3.2.16",
-    "vuex": "^4.0.2"
+    "preview": "vite preview"
   },
   "devDependencies": {
-    "@commitlint/cli": "^14.1.0",
-    "@commitlint/config-conventional": "^14.1.0",
-    "@semantic-release/gitlab": "^7.0.4",
-    "@vitejs/plugin-vue": "^1.9.3",
-    "husky": "^7.0.4",
-    "semantic-release": "^18.0.0",
-    "vite": "^2.6.4"
+    "vite": "^5.4.0"
   }
 }
