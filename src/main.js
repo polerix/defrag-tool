@@ -24,9 +24,9 @@ const EMOJI_POOL = [
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let cells       = [];
-let defrag-toolHead  = 0;
-let defrag-toolActive   = false;
-let defrag-toolComplete = false;
+let defrag-tool-toolHead  = 0;
+let defrag-tool-toolActive   = false;
+let defrag-tool-toolComplete = false;
 let elapsed     = 0;
 let totalUsedInit = 0;
 let swapCount   = 0;
@@ -155,55 +155,55 @@ function flashCell(i, color, ms = 180) {
 }
 
 // ─── Defrag algorithm ─────────────────────────────────────────────────────────
-function defrag-toolStep() {
-  if (!defrag-toolActive || defrag-toolComplete) return;
+function defrag-tool-toolStep() {
+  if (!defrag-tool-toolActive || defrag-tool-toolComplete) return;
 
   for (let ops = 0; ops < 5; ops++) {
     // advance head past non-FREE cells
-    while (defrag-toolHead < TOTAL && cells[defrag-toolHead].type !== T.FREE) defrag-toolHead++;
-    if (defrag-toolHead >= TOTAL) { finishDefrag(); return; }
+    while (defrag-tool-toolHead < TOTAL && cells[defrag-tool-toolHead].type !== T.FREE) defrag-tool-toolHead++;
+    if (defrag-tool-toolHead >= TOTAL) { finishDefrag(); return; }
 
     // find the next USED cell (skip everything else)
     let src = -1;
-    for (let j = defrag-toolHead + 1; j < TOTAL; j++) {
+    for (let j = defrag-tool-toolHead + 1; j < TOTAL; j++) {
       if (cells[j].type === T.USED) { src = j; break; }
     }
     if (src === -1) { finishDefrag(); return; }
 
     // flash read/write, then swap
-    const dst = defrag-toolHead;
+    const dst = defrag-tool-toolHead;
     flashCell(src, '#55FFFF', 170);
     flashCell(dst, '#FF55FF', 170);
     setType(dst, T.USED);
     setType(src, T.FREE);
-    defrag-toolHead++;
+    defrag-tool-toolHead++;
     swapCount++;
   }
 
   updateProgress();
 
   if (swapCount % 60 === 0) {
-    const clus = String(defrag-toolHead).padStart(6,'0');
+    const clus = String(defrag-tool-toolHead).padStart(6,'0');
     setStatus(`Moving cluster ${clus} ... [${swapCount} blocks optimized]`);
   }
 }
 
 function finishDefrag() {
-  defrag-toolComplete = true;
-  defrag-toolActive   = false;
+  defrag-tool-toolComplete = true;
+  defrag-tool-toolActive   = false;
   updateProgress();
   setStatus(`▓▓ Defragmentation complete. ${swapCount} cluster operations performed. ▓▓`, true);
   setTimeout(() => { $doneOverlay.classList.add('visible'); }, 1200);
 }
 
 function updateProgress() {
-  const pct   = Math.min(100, Math.round(defrag-toolHead / TOTAL * 100));
+  const pct   = Math.min(100, Math.round(defrag-tool-toolHead / TOTAL * 100));
   const W     = 40;
   const filled = Math.round(pct / 100 * W);
   $progressBar.textContent = '[' + '▓'.repeat(filled) + '░'.repeat(W - filled) + ']';
   $progressPct.textContent = String(pct).padStart(3) + '%';
   $clusterInfo.textContent =
-    `Clusters: ${String(defrag-toolHead).padStart(6,'0')} / ${String(TOTAL).padStart(6,'0')}` +
+    `Clusters: ${String(defrag-tool-toolHead).padStart(6,'0')} / ${String(TOTAL).padStart(6,'0')}` +
     `    Swap operations: ${swapCount}` +
     (emojis.filter(e=>e.alive).length > 0 ? `    Anomalous entities: ${emojis.filter(e=>e.alive).length}` : '');
 }
@@ -480,9 +480,9 @@ function initKeys() {
   document.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
     if (k === 'p') {
-      if (defrag-toolComplete) return;
-      defrag-toolActive = !defrag-toolActive;
-      setStatus(defrag-toolActive
+      if (defrag-tool-toolComplete) return;
+      defrag-tool-toolActive = !defrag-tool-toolActive;
+      setStatus(defrag-tool-toolActive
         ? 'Defragmentation resumed.'
         : '⏸ Defragmentation paused.  Press [P] to resume.'
       );
@@ -504,9 +504,9 @@ function restart() {
   $entities.innerHTML = '';
 
   // reset state
-  defrag-toolHead = 0;
-  defrag-toolActive   = false;
-  defrag-toolComplete = false;
+  defrag-tool-toolHead = 0;
+  defrag-tool-toolActive   = false;
+  defrag-tool-toolComplete = false;
   elapsed  = 0;
   lastDefragTs = 0;
   lastTimerTs  = 0;
@@ -519,7 +519,7 @@ function restart() {
   setStatus('Re-initializing drive C: ...');
 
   setTimeout(() => {
-    defrag-toolActive = true;
+    defrag-tool-toolActive = true;
     setStatus('Defragmenting drive C: ... Click special sectors to interact.');
   }, 1000);
 
@@ -529,7 +529,7 @@ function restart() {
 // ─── Main loop ────────────────────────────────────────────────────────────────
 function loop(ts) {
   if (ts - lastDefragTs >= 72) {
-    defrag-toolStep();
+    defrag-tool-toolStep();
     lastDefragTs = ts;
   }
   if (ts - lastTimerTs >= 1000) {
@@ -550,7 +550,7 @@ updateProgress();
 setStatus('Analyzing drive C: ...');
 
 setTimeout(() => {
-  defrag-toolActive = true;
+  defrag-tool-toolActive = true;
   setStatus('Defragmenting drive C: ... Click yellow F blocks, orange B blocks, or cyan ? blocks to interact.');
 }, 1100);
 

@@ -13,7 +13,7 @@ env:
   CONTAINER_LOCATION: 'us-central1-docker.pkg.dev'
   PROJECT_ID: 'website-328316'
   CONTAINER_REPOSITORY: 'website'
-  PROJECT_NAME: 'defrag-tool'
+  PROJECT_NAME: 'defrag-tool-tool'
 
 jobs:
   test-build:
@@ -54,7 +54,7 @@ jobs:
         run: |
           echo "$GOOGLE_CLOUD_SERVICE_ACCOUNT_BASE64" | base64 -d | docker login -u _json_key --password-stdin https://$CONTAINER_LOCATION
           docker pull $CONTAINER_LOCATION/$PROJECT_ID/$CONTAINER_REPOSITORY/$PROJECT_NAME:${{ env.IMAGE_NAME }} || true
-          docker build --build-arg SERVER_NAME=defrag-tool -t "$CONTAINER_LOCATION/$PROJECT_ID/$CONTAINER_REPOSITORY/$PROJECT_NAME:${{ env.IMAGE_NAME }}" .
+          docker build --build-arg SERVER_NAME=defrag-tool-tool -t "$CONTAINER_LOCATION/$PROJECT_ID/$CONTAINER_REPOSITORY/$PROJECT_NAME:${{ env.IMAGE_NAME }}" .
           docker push $CONTAINER_LOCATION/$PROJECT_ID/$CONTAINER_REPOSITORY/$PROJECT_NAME:${{ env.IMAGE_NAME }}
 
   deploy-to-prod:
