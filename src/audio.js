@@ -7,19 +7,43 @@
 
 let ctx = null;
 let muted = false;
+let unlocked = false;
+
+// iOS Safari's autoplay gate is stricter than "call resume() somewhere
+// inside a gesture handler": resume() returns a promise that often
+// resolves *after* the gesture has ended, which iOS treats as never
+// having unlocked at all. The reliable fix is to synchronously start a
+// zero-length buffer source from inside the gesture handler itself —
+// that's what actually wakes the hardware audio pipeline.
+function primeSilentBuffer() {
+  const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start(0);
+}
 
 function unlock() {
-  if (!ctx) {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    ctx = new AC();
-  }
-  if (ctx.state === 'suspended') ctx.resume();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  if (!ctx) ctx = new AC();
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  primeSilentBuffer();
+  unlocked = true;
 }
 
 export function initAudio() {
-  document.addEventListener('pointerdown', unlock, { once: true });
-  document.addEventListener('keydown', unlock, { once: true });
+  // touchend is Apple's documented reliable target (touchstart can be
+  // absorbed by a scroll/cancel gesture); the rest cover mouse/keyboard
+  // and non-iOS mobile browsers. Keep listening — and re-priming — on
+  // every one of these events until we've actually unlocked, since a
+  // single missed/ignored gesture on iOS is common.
+  const events = ['touchend', 'pointerdown', 'mousedown', 'keydown'];
+  const handler = () => {
+    unlock();
+    if (unlocked) events.forEach(ev => document.removeEventListener(ev, handler));
+  };
+  events.forEach(ev => document.addEventListener(ev, handler, { passive: true }));
 }
 
 export function isMuted() { return muted; }
@@ -27,7 +51,14 @@ export function setMuted(v) { muted = v; }
 export function toggleMuted() { muted = !muted; return muted; }
 
 function ready() {
-  return ctx && !muted && ctx.state === 'running';
+  if (!ctx || muted) return false;
+  if (ctx.state === 'suspended') {
+    // mobile OSes can re-suspend an unlocked context (e.g. on
+    // backgrounding) — try to self-heal rather than staying silent.
+    ctx.resume().catch(() => {});
+    return false;
+  }
+  return ctx.state === 'running';
 }
 
 // short filtered noise burst — the "click" of a head seek
@@ -113,4 +144,26 @@ export function playComplete() {
 // UI toggle / drive switch click
 export function playClick() {
   tone({ freq: 700, dur: 0.03, type: 'square', gain: 0.05 });
+}
+
+// Disruption event (rearrange / fall / corrupt / vanish / reappear) —
+// a short warble, distinct from the mechanical seek/explosion sounds.
+export function playGlitch() {
+  if (!ready()) return;
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(700, now);
+  osc.frequency.linearRampToValueAtTime(140, now + 0.22);
+  osc.frequency.linearRampToValueAtTime(500, now + 0.3);
+
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.09, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+
+  osc.connect(g).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.34);
+
+  noiseBurst({ dur: 0.05, freq: 3000, q: 4, gain: 0.04 });
 }
