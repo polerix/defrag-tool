@@ -46,4 +46,15 @@ Click a **FLAG** sector to deploy the chomper, a **BOMB** to detonate it, or
 a `?` sector to release its anomalies — all only visible in Chaos Mode.
 
 ## Deployment & Repository Status
-{}
+
+- **Standardized Name**: `defrag-tool`
+- **Remote Origin**: `https://github.com/polerix/defrag-tool.git`
+- **License Level**: `MIT` ([`LICENSE`](LICENSE))
+- **Security Policy**: [`SECURITY.md`](SECURITY.md)
+- **GitHub Actions**: ✅ Active
+- **Last Compliance Audit**: `2026-10-18`
+
+### GitHub CleanUp Log
+- **Unused / Archive / Cache Items Moved to `/Volumes/Clay/GitHubCleanUp/defrag-tool/`**: 2 item(s) (137 files, 17.07 MB)
+  - `node_modules` — Local dependency/build cache (node_modules) (136 file(s), 17.06 MB)
+  - `.DS_Store` — OS metadata file (1 file(s), 6.0 KB)

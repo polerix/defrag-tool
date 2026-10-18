@@ -10,3 +10,9 @@ dist/
 build/
 .vscode/
 .idea/
+
+# Compliance hygiene
+.venv/
+venv/
+__pycache__/
+.env
