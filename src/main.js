@@ -10,6 +10,16 @@ const SH = CH + GAP;   //  9
 // Cell origin offset (grid has 2px padding)
 const OX = 2, OY = 2;
 
+// Pace — deliberately slow/ambient. One cluster moved roughly every
+// quarter second reads as "watchable and relaxing" instead of a race.
+const TICK_MS       = 250;  // ms between defrag steps
+const OPS_PER_TICK  = 1;    // clusters moved per step
+
+// Disruption — how often loose anomalies destabilize the drive. Checked
+// on its own cadence, independent of the defrag tick.
+const DISRUPT_CHECK_MS = 400;
+const DISRUPT_KINDS = ['rearrange', 'fall', 'corrupt', 'vanish', 'reappear'];
+
 // Cell types
 const T = Object.freeze({
   FREE:0, USED:1, SYS:2, BAD:3, FLAG:4, BOMB:5, QMARK:6, EXPL:7
@@ -32,11 +42,12 @@ let defragComplete = false;
 let elapsed     = 0;
 let totalUsedInit = 0;
 let swapCount   = 0;
-let lastDefragTs= 0, lastTimerTs = 0;
+let lastDefragTs= 0, lastTimerTs = 0, lastDisruptTs = 0;
 let emojis      = [], nextEid = 0;
 let pacman      = null;
 let rafId       = null;
 let dotPool     = [];   // reusable pac-dot positions
+let disruptionCount = 0;
 
 let driveIdx  = 0;      // index into DRIVES — persists across restarts
 let chaosMode = true;   // bombs/flags/?/pacman/emoji layer — togglable
@@ -224,7 +235,7 @@ function defragStep() {
   if (!defragActive || defragComplete) return;
 
   let moved = false;
-  for (let ops = 0; ops < 5; ops++) {
+  for (let ops = 0; ops < OPS_PER_TICK; ops++) {
     // advance head past non-FREE cells
     while (defragHead < TOTAL && cells[defragHead].type !== T.FREE) defragHead++;
     if (defragHead >= TOTAL) { finishDefrag(); return; }
@@ -275,7 +286,121 @@ function updateProgress() {
   $clusterInfo.textContent =
     `Clusters: ${String(defragHead).padStart(6,'0')} / ${String(TOTAL).padStart(6,'0')}` +
     `    Swap operations: ${swapCount}` +
-    (emojis.filter(e=>e.alive).length > 0 ? `    Anomalous entities: ${emojis.filter(e=>e.alive).length}` : '');
+    (emojis.filter(e=>e.alive).length > 0 ? `    Anomalous entities: ${emojis.filter(e=>e.alive).length}` : '') +
+    (disruptionCount > 0 ? `    Anomalies: ${disruptionCount}` : '');
+}
+
+// ─── Disruption ───────────────────────────────────────────────────────────────
+// The more anomalies (emoji) are loose on the drive, the more they
+// destabilize it — this is what turns a quiet defrag into a longer,
+// unpredictable one. Zero anomalies loose = zero disruption chance, so
+// Chaos Mode "OFF" (which never spawns any) stays perfectly calm, and a
+// fresh chaos run only gets disruptive once something has actually
+// escaped containment via a ? cell.
+//
+// Any mutation that lands on already-compacted territory (index <
+// defragHead) rewinds the defrag head to it, so the algorithm has to
+// redo that stretch — that's the mechanism that extends playtime.
+
+function pickCell(predicate, tries = 12) {
+  for (let n = 0; n < tries; n++) {
+    const i = Math.floor(Math.random() * TOTAL);
+    if (predicate(cells[i].type)) return i;
+  }
+  return -1;
+}
+
+function rewindHeadTo(i) {
+  if (i < defragHead) defragHead = i;
+}
+
+function maybeDisrupt(ts) {
+  if (!chaosMode || !defragActive || defragComplete) return;
+  if (ts - lastDisruptTs < DISRUPT_CHECK_MS) return;
+  lastDisruptTs = ts;
+
+  const aliveCount = emojis.filter(e => e.alive).length;
+  if (aliveCount === 0) return;
+
+  const chance = Math.min(0.6, aliveCount * 0.08);
+  if (Math.random() > chance) return;
+
+  triggerDisruption();
+}
+
+function triggerDisruption() {
+  const kind = DISRUPT_KINDS[Math.floor(Math.random() * DISRUPT_KINDS.length)];
+  const movable = t => t === T.FREE || t === T.USED;
+
+  if (kind === 'rearrange') {
+    const i = pickCell(movable);
+    const j = pickCell(movable);
+    if (i === -1 || j === -1 || i === j) return;
+    const ti = cells[i].type, tj = cells[j].type;
+    if (ti === tj) return; // no visible effect
+    setType(i, tj);
+    setType(j, ti);
+    flashCell(i, '#55FFFF', 260);
+    flashCell(j, '#FF55FF', 260);
+    rewindHeadTo(Math.min(i, j));
+    disruptionCount++;
+    audio.playGlitch();
+    setStatus(`⚡ GLITCH: sectors ${i} and ${j} swapped places unexpectedly.`);
+    return;
+  }
+
+  if (kind === 'fall') {
+    const i = pickCell(movable);
+    if (i === -1) return;
+    const dir = Math.random() < 0.5 ? -COLS : COLS;
+    const j = i + dir;
+    if (j < 0 || j >= TOTAL || !movable(cells[j].type) || cells[j].type === cells[i].type) return;
+    const ti = cells[i].type, tj = cells[j].type;
+    setType(i, tj);
+    setType(j, ti);
+    flashCell(i, '#AAFF55', 260);
+    flashCell(j, '#AAFF55', 260);
+    rewindHeadTo(Math.min(i, j));
+    disruptionCount++;
+    audio.playGlitch();
+    setStatus(`↕ GRAVITY FAULT: sector ${i} fell ${dir < 0 ? 'upward' : 'downward'} through the drive.`);
+    return;
+  }
+
+  if (kind === 'corrupt') {
+    const i = pickCell(t => t === T.USED);
+    if (i === -1) return;
+    setType(i, T.BAD);
+    flashCell(i, '#FF2200', 320);
+    disruptionCount++;
+    audio.playGlitch();
+    setStatus(`☠ DATA CORRUPTION: sector ${i} is unreadable.`, true);
+    return;
+  }
+
+  if (kind === 'vanish') {
+    const i = pickCell(t => t === T.USED);
+    if (i === -1) return;
+    setType(i, T.FREE);
+    flashCell(i, '#AA55FF', 320);
+    rewindHeadTo(i);
+    disruptionCount++;
+    audio.playGlitch();
+    setStatus(`◌ ANOMALY: sector ${i} vanished into the void.`, true);
+    return;
+  }
+
+  if (kind === 'reappear') {
+    const i = pickCell(t => t === T.FREE);
+    if (i === -1) return;
+    setType(i, T.USED);
+    flashCell(i, '#FFFFFF', 320);
+    rewindHeadTo(i);
+    disruptionCount++;
+    audio.playGlitch();
+    setStatus(`✦ PHANTOM DATA: sector ${i} materialized from nowhere.`, true);
+    return;
+  }
 }
 
 // ─── Click dispatch ───────────────────────────────────────────────────────────
@@ -607,8 +732,10 @@ function restart() {
   defragActive   = false;
   defragComplete = false;
   elapsed  = 0;
-  lastDefragTs = 0;
-  lastTimerTs  = 0;
+  lastDefragTs  = 0;
+  lastTimerTs   = 0;
+  lastDisruptTs = 0;
+  disruptionCount = 0;
   $doneOverlay.classList.remove('visible');
 
   initCells();
@@ -629,7 +756,7 @@ function restart() {
 
 // ─── Main loop ────────────────────────────────────────────────────────────────
 function loop(ts) {
-  if (ts - lastDefragTs >= 72) {
+  if (ts - lastDefragTs >= TICK_MS) {
     defragStep();
     lastDefragTs = ts;
   }
@@ -637,6 +764,7 @@ function loop(ts) {
     updateTimer();
     lastTimerTs = ts;
   }
+  maybeDisrupt(ts);
   updateEmojis();
   updatePacman();
   rafId = requestAnimationFrame(loop);

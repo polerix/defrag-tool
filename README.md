@@ -23,6 +23,18 @@ simulator (real HDD audio, a multi-drive selector):
   with `[C]` or the `[Chaos]` control, for a calmer, more authentic defrag
   run.
 
+## Instability
+
+While Chaos Mode is on and anomalies are loose on the drive, the more of
+them are active the more they destabilize it — sectors can rearrange,
+fall up or down a row, corrupt, vanish, or have phantom data reappear.
+Anything that lands on territory the defrag already compacted rewinds
+progress there, so a chaotic run genuinely takes longer than a quiet one.
+Zero anomalies loose (or Chaos Mode off) means zero disruption.
+
+Pacing is deliberately slow and ambient — about 4 clusters moved per
+second on a quiet run — meant to be watched, not raced.
+
 ## Development
 
 ```bash
