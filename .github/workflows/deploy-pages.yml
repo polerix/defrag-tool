@@ -25,6 +25,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Verify all HTML entries were built
+        run: |
+          missing=0
+          for f in *.html; do
+            if [ ! -f "dist/$f" ]; then
+              echo "::error::$f exists in the repo root but is missing from dist/ -- is it registered in vite.config's build.rollupOptions.input?"
+              missing=1
+            fi
+          done
+          exit $missing
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3
         with:
